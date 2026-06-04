@@ -11,6 +11,6 @@ class ContracteraLaravelClientServiceProvider extends PackageServiceProvider
     {
         $package
             ->name('contractera-laravel-client')
-            ->hasConfigFile();
+            ->hasConfigFile('contractera-laravel-client');
     }
 }

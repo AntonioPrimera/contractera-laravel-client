@@ -8,6 +8,12 @@ use AntonioPrimera\ContracteraLaravelClient\Exceptions\MissingApplicationToken;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 
+it('loads the package config under the documented config key', function () {
+    expect(config('contractera-laravel-client.base_url'))->toBe('https://contractor.test')
+        ->and(config('contractera-laravel-client.default_placeholder_pattern'))->toBe('__#__')
+        ->and(config('contractera-laravel-client.timeout'))->toBe(30);
+});
+
 it('provisions an account using the configured application token', function () {
     config()->set('contractera-laravel-client.base_url', 'https://contractera.test');
     config()->set('contractera-laravel-client.application_token', 'app-token');
