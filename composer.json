@@ -1,24 +1,26 @@
 {
-    "name": ":vendor_slug/:package_slug",
-    "description": ":package_description",
+    "name": "antonioprimera/contractera-laravel-client",
+    "description": "Laravel client package for backend-only Contractera integrations.",
     "keywords": [
-        ":vendor_name",
+        "contractera",
         "laravel",
-        ":package_slug"
+        "client",
+        "documents"
     ],
-    "homepage": "https://github.com/:vendor_slug/:package_slug",
+    "homepage": "https://github.com/AntonioPrimera/contractera-laravel-client",
     "license": "MIT",
     "authors": [
         {
-            "name": ":author_name",
-            "email": "author@domain.com",
+            "name": "Antonio Primera",
+            "email": "antonio@raprim.ro",
             "role": "Developer"
         }
     ],
     "require": {
         "php": "^8.4",
-        "spatie/laravel-package-tools": "^1.16",
-        "illuminate/contracts": "^11.0||^12.0||^13.0"
+        "illuminate/http": "^11.0||^12.0||^13.0",
+        "illuminate/support": "^11.0||^12.0||^13.0",
+        "spatie/laravel-package-tools": "^1.16"
     },
     "require-dev": {
         "laravel/pint": "^1.14",
@@ -35,13 +37,13 @@
     },
     "autoload": {
         "psr-4": {
-            "VendorName\\Skeleton\\": "src/",
-            "VendorName\\Skeleton\\Database\\Factories\\": "database/factories/"
+            "AntonioPrimera\\ContracteraLaravelClient\\": "src/",
+            "AntonioPrimera\\ContracteraLaravelClient\\Database\\Factories\\": "database/factories/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "VendorName\\Skeleton\\Tests\\": "tests/",
+            "AntonioPrimera\\ContracteraLaravelClient\\Tests\\": "tests/",
             "Workbench\\App\\": "workbench/app/"
         }
     },
@@ -63,11 +65,8 @@
     "extra": {
         "laravel": {
             "providers": [
-                "VendorName\\Skeleton\\SkeletonServiceProvider"
-            ],
-            "aliases": {
-                "Skeleton": "VendorName\\Skeleton\\Facades\\Skeleton"
-            }
+                "AntonioPrimera\\ContracteraLaravelClient\\ContracteraLaravelClientServiceProvider"
+            ]
         }
     },
     "minimum-stability": "dev",

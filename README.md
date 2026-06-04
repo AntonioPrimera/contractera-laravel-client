@@ -1,92 +1,263 @@
-# :package_description
+# Contractera Laravel Client
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/:vendor_slug/:package_slug.svg?style=flat-square)](https://packagist.org/packages/:vendor_slug/:package_slug)
-[![GitHub Tests Action Status](https://github.com/spatie/package-skeleton-laravel/actions/workflows/run-tests.yml/badge.svg)](https://github.com/:vendor_slug/:package_slug/actions?query=workflow%3Arun-tests+branch%3Amain)
-[![GitHub Code Style Action Status](https://github.com/spatie/package-skeleton-laravel/actions/workflows/fix-php-code-style-issues.yml/badge.svg)](https://github.com/:vendor_slug/:package_slug/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
-[![Total Downloads](https://img.shields.io/packagist/dt/:vendor_slug/:package_slug.svg?style=flat-square)](https://packagist.org/packages/:vendor_slug/:package_slug)
-<!--delete-->
----
-This repo can be used to scaffold a Laravel package. Follow these steps to get started:
+Laravel client package for backend-only Contractera integrations.
 
-1. Press the "Use this template" button at the top of this repo to create a new repo with the contents of this skeleton.
-2. Run "php ./configure.php" to run a script that will replace all placeholders throughout all the files.
-3. Have fun creating your package.
-4. If you need help creating a package, consider picking up our <a href="https://laravelpackage.training">Laravel Package Training</a> video course.
----
-<!--/delete-->
-This is where your description should go. Limit it to a paragraph or two. Consider adding a small example.
+The package is meant to be used together with the Vue SDK:
 
-## Support us
+```bash
+npm install @raprim/contractera-plugin-vue3
+```
 
-[<img src="https://github-ads.s3.eu-central-1.amazonaws.com/:package_name.jpg?t=1" width="419px" />](https://spatie.be/github-ad-click/:package_name)
+The frontend package renders the UI. This Composer package handles the server-to-server Contractera API calls from a Laravel host application such as AgroCity or ProjectCity.
 
-We invest a lot of resources into creating [best in class open source packages](https://spatie.be/open-source). You can support us by [buying one of our paid products](https://spatie.be/open-source/support-us).
-
-We highly appreciate you sending us a postcard from your hometown, mentioning which of our package(s) you are using. You'll find our address on [our contact page](https://spatie.be/about-us). We publish all received postcards on [our virtual postcard wall](https://spatie.be/open-source/postcards).
+Browser code must never receive Contractera tokens.
 
 ## Installation
 
-You can install the package via composer:
-
 ```bash
-composer require :vendor_slug/:package_slug
+composer require antonioprimera/contractera-laravel-client
 ```
 
-You can publish and run the migrations with:
+Publish the config:
 
 ```bash
-php artisan vendor:publish --tag=":package_slug-migrations"
-php artisan migrate
+php artisan vendor:publish --tag="contractera-laravel-client-config"
 ```
 
-You can publish the config file with:
+Add environment values:
 
-```bash
-php artisan vendor:publish --tag=":package_slug-config"
+```env
+CONTRACTERA_BASE_URL=https://contractera.ro
+CONTRACTERA_APPLICATION_TOKEN=plain-text-application-token
+CONTRACTERA_DEFAULT_PLACEHOLDER_PATTERN=__#__
+CONTRACTERA_TIMEOUT=30
+CONTRACTERA_RETRY_TIMES=2
+CONTRACTERA_RETRY_SLEEP_MILLISECONDS=250
 ```
 
-This is the contents of the published config file:
+Local development usually uses:
+
+```env
+CONTRACTERA_BASE_URL=https://contractor.test
+```
+
+## Security model
+
+Contractera uses two token types:
+
+1. `Application token` - stored in the host backend and used for cross-account operations such as provisioning, updating, deleting and regenerating account tokens.
+2. `Account token` - issued by Contractera for one Contractera account and used for template/document operations.
+
+The host application must store account tokens encrypted and must proxy all frontend requests through its own backend.
+
+## Provision an account
 
 ```php
-return [
-];
+use AntonioPrimera\ContracteraLaravelClient\ContracteraClient;
+
+$contracteraAccount = app(ContracteraClient::class)->provisionAccount(
+    externalAccountId: 'agrocity-account-'.$agrocityAccount->id,
+    name: $agrocityAccount->name,
+);
+
+$agrocityAccount->forceFill([
+    'contractera_account_id' => $contracteraAccount->id,
+    'contractera_external_account_id' => $contracteraAccount->externalAccountId,
+    'contractera_account_token' => $contracteraAccount->accountToken,
+])->save();
 ```
 
-Optionally, you can publish the views using
-
-```bash
-php artisan vendor:publish --tag=":package_slug-views"
-```
-
-## Usage
+Recommended host model casts:
 
 ```php
-$:variable = new VendorName\Skeleton();
-echo $:variable->echoPhrase('Hello, VendorName!');
+protected function casts(): array
+{
+    return [
+        'contractera_account_token' => 'encrypted',
+        'contractera_connected_at' => 'datetime',
+        'contractera_disconnected_at' => 'datetime',
+    ];
+}
+```
+
+## Application-scoped operations
+
+```php
+$client = app(ContracteraClient::class);
+
+$accounts = $client->listAccounts();
+
+$account = $client->updateAccount($contracteraAccountId, [
+    'name' => 'Updated account name',
+]);
+
+$account = $client->regenerateAccountToken($contracteraAccountId);
+
+$client->deleteAccount($contracteraAccountId);
+```
+
+`deleteAccount()` marks the account for deletion in Contractera and immediately revokes account-scoped tokens.
+
+## Account-scoped operations
+
+Create an account-scoped client from the encrypted token stored in the host application:
+
+```php
+$accountClient = app(ContracteraClient::class)
+    ->forAccountToken($agrocityAccount->contractera_account_token);
+```
+
+### List templates
+
+```php
+$templates = $accountClient->listTemplates();
+```
+
+### Upload template
+
+```php
+$template = $accountClient->uploadTemplate(
+    name: 'Contract arenda',
+    placeholderPattern: '__#__',
+    file: $request->file('file'),
+);
+```
+
+For a placeholder like `__OWNER_NAME__`, use pattern `__#__`. Contractera exposes key `OWNER_NAME`.
+
+### Placeholder metadata
+
+```php
+$placeholders = $accountClient->listPlaceholders($templateId);
+
+$updated = $accountClient->updatePlaceholders($templateId, [
+    [
+        'key' => 'OWNER_NAME',
+        'label' => 'Nume proprietar',
+        'input_type' => 'text',
+        'required' => true,
+        'help_text' => null,
+        'display_order' => 1,
+        'input_config' => [],
+    ],
+]);
+```
+
+Supported `input_type` values:
+
+```txt
+text
+textarea
+date
+number
+email
+select
+checkbox
+rich_text
+```
+
+### Validate and preview
+
+```php
+$preview = $accountClient->validatePreview($templateId, [
+    'OWNER_NAME' => 'Ion Popescu',
+]);
+
+if ($preview->valid) {
+    echo $preview->html;
+}
+```
+
+The host frontend should allow generation only after Contractera returns a valid preview response.
+
+### Generate document
+
+```php
+$document = $accountClient->generateDocument(
+    templateId: $templateId,
+    values: [
+        'OWNER_NAME' => 'Ion Popescu',
+    ],
+    format: 'docx',
+);
+
+$document->id;
+$document->status;
+$document->downloadUrls;
+```
+
+### Status and download
+
+```php
+$document = $accountClient->generatedDocument($documentId);
+
+$response = $accountClient->downloadDocument($documentId, 'docx');
+
+return response($response->body(), $response->status(), [
+    'Content-Type' => $response->header('Content-Type'),
+    'Content-Disposition' => $response->header('Content-Disposition'),
+]);
+```
+
+The host application should expose local download URLs to the browser, not direct Contractera URLs.
+
+## Frontend integration
+
+The Vue SDK receives an adapter implemented by the host frontend. That adapter calls local backend routes, and those local backend routes use this Composer package.
+
+Recommended local routes:
+
+```http
+GET /contractera/templates
+POST /contractera/templates
+GET /contractera/templates/{templateId}/placeholders
+PATCH /contractera/templates/{templateId}/placeholders
+POST /contractera/templates/{templateId}/validate-preview
+POST /contractera/templates/{templateId}/generate
+GET /contractera/generated-documents/{documentId}
+GET /contractera/generated-documents/{documentId}/download?format=docx|pdf|html
+```
+
+## Host application testing
+
+After installing this package in a Laravel host application, test both layers:
+
+1. backend proxy tests with `Http::fake()`:
+   - provisioning calls use the Application token;
+   - template/document calls use the account token;
+   - browser responses never contain Contractera tokens;
+   - `validate-preview` converts frontend `values` to Contractera `replacements`;
+   - generated document URLs returned to the browser are local host URLs;
+2. frontend/browser checks with `@raprim/contractera-plugin-vue3`:
+   - placeholder metadata loads and saves;
+   - live preview updates after debounced form edits;
+   - invalid input blocks generation;
+   - generated documents download through the host backend;
+   - mobile mode uses `mobile-mode="tab"` or another explicit mobile strategy.
+
+The reference integration app is:
+
+```txt
+/Users/antonio/Workspace/workbench/contractera-integrator
+```
+
+Its Contractera integration tests are in:
+
+```txt
+tests/Feature/ContracteraIntegrationTest.php
 ```
 
 ## Testing
 
 ```bash
 composer test
+composer analyse
+composer format
 ```
 
-## Changelog
+## Compatibility
 
-Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
-
-## Contributing
-
-Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
-
-## Security Vulnerabilities
-
-Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
-
-## Credits
-
-- [:author_name](https://github.com/:author_username)
-- [All Contributors](../../contributors)
+Use this package with `@raprim/contractera-plugin-vue3` using the same major version once both packages are versioned.
 
 ## License
 
